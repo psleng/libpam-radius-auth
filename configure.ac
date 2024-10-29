@@ -23,7 +23,7 @@ dnl #############################################################
 AC_PREREQ([2.59])
 export CFLAGS LIBS LDFLAGS CPPFLAGS
 
-AC_INIT([libpam-radius-auth],1.4.1,[http://www.cumulusnetworks.com],,[http://www.cumulusnetworks.com])
+AC_INIT([pam_radius],1.5,[http://bugs.freeradius.org],,[http://www.freeradius.org])
 AC_CONFIG_SRCDIR([src/pam_radius_auth.c])
 AC_CONFIG_HEADER([src/config.h])
 m4_include([m4/ax_cc.m4])
@@ -202,6 +202,17 @@ AC_CHECK_HEADERS(net/if.h, [], [],
   ]
 )
 
+dnl #
+dnl #  Linux requires sys/socket.h before linux/if.h
+dnl #
+AC_CHECK_HEADERS([linux/if.h],[],[],
+  [
+    #if HAVE_SYS_SOCKET_H
+    #  include <sys/socket.h>
+    #endif
+  ]
+)
+
 dnl #############################################################
 dnl #
 dnl #  4. Checks for typedefs
@@ -306,6 +317,7 @@ AC_CHECK_FUNCS( \
   inet_aton \
   inet_pton \
   inet_ntop \
+  setsockopt \
   strlcat \
   strlcpy
 )

@@ -1,96 +1,111 @@
-libpam-radius-auth (1.5.0-cl3u7) RELEASED; urgency=low
-  * Closes: CM-24829 - Fixed order setting vrf and binding to source address
+libpam-radius-auth (2.0.0-1) unstable; urgency=medium
 
- -- dev-support <dev-support@cumulusnetworks.com>  Fri, 01 Mar 2019 14:21:25 -0800
+  * [2736aa5] d/libpam-radius-auth.install: Adjust install path
+    Debian is supporting the Multiarch idea, thus we need to install the
+    library into /lib/$DEB_HOST_MULTIARCH/security/ so it will get found.
 
-libpam-radius-auth (1.5.0-cl3u6) RELEASED; urgency=low
-  * Do not show passwd when debugging enabled
+ -- Carsten Schoenert <c.schoenert@t-online.de>  Thu, 18 Feb 2021 17:50:12 +0100
 
- -- dev-support <dev-support@cumulusnetworks.com>  Fri, 01 Mar 2019 14:21:25 -0800
+libpam-radius-auth (2.0.0-1~exp1) experimental; urgency=medium
 
-libpam-radius-auth (1.5.0-cl3u5) RELEASED; urgency=low
-  * Closes: CM-23004 - local account password was allowed even when
-    RADIUS server could be reached and was authoritative for the accountname
+  * [60bdc37] New upstream version 2.0.0
+    (Closes: #789144)
+  * [86a931c] remove current patch queue
+  * [ede4270] d/rules: add an override to the clean target
+    Upstream has some oblique logic in the top level Makefile if the user is
+    calling the target (dist)clean in case configure wasn't running or called
+    before.
+  * [a6a0d61] pam-configs: add config file for radius authentication
+    Starting with this version we provide a configuration file for the
+    pam-auth-update utility. Thanks Brett Delle Grazie for providing the
+    content for the config file!
+    (Closes: #614967)
+  * [858f509] Adding postinst and prerm hook
+    In order to get pam-auth-update called on package installations and also
+    in case of the removal of the package we need to add the hook files.
+  * [1418c7b] d/README.Debian: add info about PAM config file
+  * [ee10bc8] NEWS: create file to announce important info on install
 
- -- dev-support <dev-support@cumulusnetworks.com>  Thu, 15 Nov 2018 13:51:34 -0800
+ -- Carsten Schoenert <c.schoenert@t-online.de>  Thu, 04 Feb 2021 18:53:30 +0100
 
-libpam-radius-auth (1.5.0-cl3u4) RELEASED; urgency=low
-  * fixed radius_shell to ensure euid set also, when run as a local user
-    shell (so user can still login when the radius server is done).
+libpam-radius-auth (1.4.0-4) unstable; urgency=medium
 
- -- dev-support <dev-support@cumulusnetworks.com>  Tue, 28 Aug 2018 11:52:21 -0700
+  * [dd1321d] d/watch: adding a watch file
+    The source for pam_radius is managed on GitHub. We can monitor easily for
+    newer version with a watch file.
+  * [46be465] d/gbp.conf: adding extra configuration for git-buildpackage
+    Use gbp for package management, a dedicated config file helps to keep the
+    effort of the additional packaging workflow low.
+  * [22839a4] d/README.source: adding info about source code management
+    Adding some explation how this package is maintained (by gbp).
+  * [1c3580a] running wrap-and-sort to improve readability
+  * [23a72b1] d/copyright: change format to DEP5
+    Turning the existing copyright file into a machine readable format.
+  * [c6d3838] d/control: Bump Standards-Version to 4.5.1
+    No further changes needed.
+  * [d11655b] d/control: move over to debhelper 13
+    Update the debhelper compat modus to the current most recent version 13.
+  * [f4c3434] d/libpam-radius-auth.docs: use index.html from upstream
+    We don't need to maintain a index.html file within the debian/ folder,
+    upstream ships a own file since a while and keep this of course up to date.
+  * [65e7199] d/control: Chris and myself will maintain pam_radius
+    (Closes: #833039, #951770)
+  * [b80ed5c] d/u/metadata: add basic meta-information for pam_radius
+  * [25d1da5] d/libpam-radius-auth.doc-base: add sequencer file
+    Register the shipped index.html file with doc-base.
 
-libpam-radius-auth (1.5.0-cl3u3) RELEASED; urgency=low
-  * minor bug fix
+ -- Carsten Schoenert <c.schoenert@t-online.de>  Fri, 29 Jan 2021 17:01:06 +0100
 
- -- dev-support <dev-support@cumulusnetworks.com>  Mon, 25 Jun 2018 22:07:29 -0700
+libpam-radius-auth (1.4.0-3) unstable; urgency=medium
 
-libpam-radius-auth (1.5.0-cl3u2) RELEASED; urgency=low
-  * Closes: CM-20649 - Fixed problem that didn't create the home directory
-  for privileged login users.
+  * QA upload
+  * Add patch to fix buffer overflow in password field.
+    (Fixes: CVE-2015-9542) (Closes: #951396)
+  * Bump Standards-Version to 4.5.0 and dh-compat to 12
 
- -- dev-support <dev-support@cumulusnetworks.com>  Wed, 18 Apr 2018 18:24:48 -0700
+ -- Utkarsh Gupta <utkarsh@debian.org>  Fri, 21 Feb 2020 15:47:11 +0530
 
-libpam-radius-auth (1.5.0-cl3u1) RELEASED; urgency=low
-  * New Enabled - When the Vendor Specific Option (VSA) containing
-    shell:priv-lvl is present and and the level value is >= to the level
-    set in the config file (15 by default), the user is made a member
-    of the groups containing the radius_priv_user, to enable configuration.
-    Typically this includes the sudo and netedit accounts.
-    The unprivileged radius_user login is added to the netshow group at
-    install, therefore non-privileged radius users can run 'net show' cmds
-    The privileged radius_priv_user login is added to the netedit and sudo
-    groups at install, therefore privileged radius users can sudo, and
-    can run 'net add', 'net commit', etc.
+libpam-radius-auth (1.4.0-2) unstable; urgency=medium
 
- -- dev-support <dev-support@cumulusnetworks.com>  Sun, 15 Apr 2018 14:53:33 -0700
+  * QA upload.
+  * Fix a regression that made libpam-radius-auth/1.4.0-1 use
+    a different configuration file than intended.  This version
+    restores /etc/pam_radius_auth.conf as the configuration
+    file for Debian package of libpam-radius-auth.
+    (Closes: #908006)
+  * Use the new "debhelper-compat (= 11)" method for specifying
+    debhelper compat version.
 
-libpam-radius-auth (1.4.1-cl3u3) RELEASED; urgency=low
+ -- Niels Thykier <niels@thykier.net>  Wed, 05 Sep 2018 19:44:07 +0000
 
-  * Closes CM-19908 - Logging changed to use pam_syslog, log message format
-    now has program invoking, not just pam_radius_auth
+libpam-radius-auth (1.4.0-1) unstable; urgency=low
 
- -- dev-support <dev-support@cumulusnetworks.com>  Tue, 27 Feb 2018 14:47:22 -0800
+  * QA upload.
+  * New upstream release.  (Closes: #854284)
+  * Drop patch that was applied upstream or no longer relevant.
+  * Set Rules-Requires-Root to "no".
+  * Bump Priority to "optional" since "extra" has been
+    removed.
+  * Rewrite rules file to the dh7-style.
+  * Add ${misc:Depends} to the Depends field.
+  * Add Homepage field.
+  * Correct section to admin.
+  * Change to source format 3.0 (quilt).
+  * Bump debhelper compat to 11.
+  * Enable bindnow hardening.
+  * Update debian/copyright.
+  * Bump Standards-Versions to 4.2.0 - no additional changes
+    required.
 
-libpam-radius-auth (1.4.1-cl3u2) RELEASED; urgency=low
+ -- Niels Thykier <niels@thykier.net>  Sun, 19 Aug 2018 12:16:13 +0000
 
-  * Improved documentation in man pages
+libpam-radius-auth (1.3.16-5) unstable; urgency=medium
 
- -- dev-support <dev-support@cumulusnetworks.com>  Tue, 23 Jan 2018 16:03:38 -0800
+  * QA upload
+  * Set maintainer field to Debian QA Group (see #833039)
+  * Bump debhelper compat level. Closes: #817544
 
-libpam-radius-auth (1.4.1-cl3u1) RELEASED; urgency=low
-
-  * Added support for mapping radius accounts to a local account
-    to get UID, GID, and base of home directory, so radius users
-    do not need to have an account created locally (or via LDAP)
-
- -- dev-support <dev-support@cumulusnetworks.com>  Fri, 16 Jun 2017 15:44:12 -0700
-
-libpam-radius-auth (1.4.0) unstable; urgency=low
-
-   * Many changes and bug fixes.  See USAGE and git log for details.
-   * src_ip in config file
-   * ipv6 support
-   * configure can use poll or select
-   * Add Calling-Station-Id to accounting requests
-   * mostly thread safe
-   * add force_prompt option to enforce new password prompt for use with Tok
-   * NetBSD fixes
-   * new parameter max_challenge limits number of Access-Challenges
-   * build: do not force flags, add to them instead.
-   * build: use GCC for build, and ensure that unneeded symbols are not exported.
-
- -- Alan T. DeKok <aland@freeradius.org>  Thu, 23 Mar 2017 19:01:20 -0400
-
-libpam-radius-auth (1.3.17) unstable; urgency=low
-
-  * Allow any number of retries, instead of only up to 3.
-  * Add ruser option, to authenticate as PAM_RUSER instead of PAM_USER,
-    to allow applications such as 'su' to authenticate as the real user.
-    Patch from David Mitchell.
-  * Add 'localifdown' option.
-
- -- Arran Cudbard-Bell <a.cudbardb@freeradius.org>  Wed, 24 Oct 2012 08:18:01 +0100
+ -- Christoph Biedl <debian.axhn@manchmal.in-ulm.de>  Sun, 18 Dec 2016 23:47:08 +0100
 
 libpam-radius-auth (1.3.16-4.4) unstable; urgency=low
 

@@ -17,64 +17,71 @@
 #include <ctype.h>
 #include <stdlib.h>
 #include <syslog.h>
-#include <security/pam_ext.h>
 #include <stdarg.h>
 #include <utmp.h>
-#include <pwd.h>
 #include <time.h>
 #include <netinet/in.h>
 #include <netdb.h>
 #include <fcntl.h>
 #include <arpa/inet.h>
 
+#if defined(HAVE_LINUX_IF_H)
+#include <linux/if.h>
+#else
+#define IFNAMSIZ 16 /* fallback to current value */
+#endif
+
 #ifdef HAVE_POLL_H
 #include <poll.h>
 #endif
 
 #if defined(HAVE_SECURITY_PAM_APPL_H)
-#include <security/pam_appl.h>
+#  include <security/pam_appl.h>
 #elif defined(HAVE_PAM_PAM_APPL_H)
-#include <pam/pam_appl.h>
+#  include <pam/pam_appl.h>
 #endif
 
 #if defined(HAVE_SECURITY_PAM_MODULES_H)
-#include <security/pam_modules.h>
+#  include <security/pam_modules.h>
 #elif defined(HAVE_PAM_PAM_APPL_H)
-#include <pam/pam_modules.h>
+#  include <pam/pam_modules.h>
 #else
-#error security/pam_modules.h or pam/pam_modules.h required
+#  error security/pam_modules.h or pam/pam_modules.h required
 #endif
+
 
 #include "radius.h"
 #include "md5.h"
 
 /* Defaults for the prompt option */
-#define MAXPROMPT 33		/* max prompt length, including '\0' */
-#define DEFAULT_PROMPT "Password: "	/* default prompt, */
+#define MAXPROMPT 33               /* max prompt length, including '\0' */
+#define DEFAULT_PROMPT "Password"  /* default prompt, without the ': '  */
+
 
 /*************************************************************************
  * Platform specific defines
  *************************************************************************/
 
 #ifndef CONST
-#if defined(__sun) || defined(__linux__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__APPLE__)
+#  if defined(__sun) || defined(__linux__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__APPLE__)
 /*
  *  On older versions of Solaris, you may have to change this to:
  *  #define CONST
  */
-#define CONST const
-#else
-#define CONST
-#endif
+#    define CONST const
+#  else
+#    define CONST
+#  endif
 #endif
 
 #ifndef PAM_EXTERN
-#ifdef __sun
-#define PAM_EXTERN extern
-#else
-#define PAM_EXTERN
+#  ifdef __sun
+#    define PAM_EXTERN extern
+#  else
+#    define PAM_EXTERN
+#  endif
 #endif
-#endif
+
 
 /*************************************************************************
  * Useful macros and defines
@@ -91,28 +98,30 @@
 #define PAM_TRY_FIRST_PASS 8
 #define PAM_RUSER_ARG      16
 
+
 /* buffer size for IP address in string form */
 #define MAX_IP_LEN 16
 
 /* Module defines */
 #ifndef BUFFER_SIZE
 #define BUFFER_SIZE      1024
-#endif				/* BUFFER_SIZE */
-#define MAXPWNAM 253		/* maximum user name length. Server dependent,
-				 * this is the default value
-				 */
-#define MAXPASS 128		/* max password length. Again, depends on server
-				 * compiled in. This is the default.
-				 */
-#ifndef CONF_FILE		/* the configuration file holding the server secret */
+#endif /* BUFFER_SIZE */
+#define MAXPWNAM 253    /* maximum user name length. Server dependent,
+                         * this is the default value
+                         */
+#define MAXPASS 128     /* max password length. Again, depends on server
+                         * compiled in. This is the default.
+                         */
+#ifndef CONF_FILE       /* the configuration file holding the server secret */
 #define CONF_FILE       "/etc/raddb/server"
-#endif				/* CONF_FILE */
+#endif /* CONF_FILE */
 
 #ifndef FALSE
 #define FALSE 0
 #undef TRUE
 #define TRUE !FALSE
 #endif
+
 
 /*************************************************************************
  * Additional RADIUS definitions
@@ -128,39 +137,31 @@ typedef struct attribute_t {
 typedef struct radius_server_t {
 	struct radius_server_t *next;
 	struct sockaddr_storage ip_storage;
-	struct sockaddr_storage ipacct_storage;
 	struct sockaddr *ip;
-	struct sockaddr *ip_acct;
 	char *hostname;
-	char *hostpart;
 	char *secret;
-	char *port;
 	int timeout;
+	int accounting;
 	int sockfd;
-	int family;
-	char src_ip[MAX_IP_LEN];
+	int sockfd6;
+	char vrf[IFNAMSIZ];
 } radius_server_t;
 
 typedef struct radius_conf_t {
 	radius_server_t *server;
-	char *client_id;
-	CONST char *conf_file;
 	int retries;
 	int localifdown;
+	char *client_id;
 	int accounting_bug;
 	int force_prompt;
 	int max_challenge;
+	int sockfd;
+	int sockfd6;
 	int debug;
-	int min_priv_lvl;
+	CONST char *conf_file;
 	char prompt[MAXPROMPT];
-	char vrfname[64];
-	char privusrmap[64];
+	int prompt_attribute;
+	int privilege_level;
 } radius_conf_t;
 
-void __write_mapfile(pam_handle_t * p, const char *usr, uid_t uid, int priv,
-		     int dbg);
-int __remove_mapfile(pam_handle_t * pamh, const char *user, int dbg);
-void __chk_homedir(pam_handle_t * p, const char *usr, const char *home,
-		   int dbg);
-
-#endif				/* PAM_RADIUS_H */
+#endif /* PAM_RADIUS_H */

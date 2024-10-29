@@ -2,8 +2,10 @@
 
 set -e
 
-if [ "$1" = remove ]; then
-	pam-auth-update --package --remove radius
+if [ "$1" = "remove" ]; then
+    pam-auth-update --package --remove radius
 fi
 
 #DEBHELPER#
+
+exit 0
