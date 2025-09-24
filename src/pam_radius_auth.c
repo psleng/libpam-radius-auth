@@ -1716,8 +1716,26 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t * pamh, int flags, int argc,
 					 "=%d, min for priv=%d", privlvl,
 					 config.min_priv_lvl);
 		}
-		setup_userinfo(pamh, &config, user, debug,
-			       privlvl >= config.min_priv_lvl);
+
+		/* Set effective privilege level */
+		int effective_privlvl = privlvl;
+		if (privlvl < 0) {
+			effective_privlvl = 1;  /* Default privilege level */
+		}
+		
+		setup_userinfo(pamh, &config, user, debug, privlvl >= config.min_priv_lvl);		
+		
+		/* Set privilege level in PAM environment for application access */			
+		char privlvl_env[64];
+		char privileged_env[64];
+		
+		snprintf(privlvl_env, sizeof(privlvl_env), "RADIUS_PRIVLVL=%d", effective_privlvl);
+		snprintf(privileged_env, sizeof(privileged_env), "RADIUS_PRIVILEGED=%s", 
+				privlvl >= config.min_priv_lvl ? "yes" : "no");
+		
+		pam_putenv(pamh, privlvl_env);
+		pam_putenv(pamh, privileged_env);
+		
 		retval = PAM_SUCCESS;
 	} else {
 		retval = PAM_AUTH_ERR;	/* authentication failure */
