@@ -30,6 +30,7 @@
 #define PAM_SM_PASSWORD
 #define PAM_SM_SESSION
 
+#include <dlfcn.h>
 #include "pam_radius_auth.h"
 
 #define DPRINT if (debug || cfg_debug) _pam_log
@@ -47,6 +48,30 @@ static void _pam_log(pam_handle_t * pamh, int err, CONST char *format, ...)
 	va_end(args);
 
 }
+
+static void store_attr(pam_handle_t * pamh, AUTH_HDR *response)
+{
+	void *handle = dlopen("libiol_pamperle.so", RTLD_NOW);
+	if (!handle)
+	{
+		_pam_log(pamh, LOG_ERR,"dlopen failed: %s", dlerror());
+		return;
+	}
+
+	void (*func)(pam_handle_t * pamh,AUTH_HDR *response) = dlsym(handle, "store_radius_attr");
+	if (!func)
+	{
+		_pam_log(pamh, LOG_ERR,"dlsym failed: %s", dlerror());
+		return;
+	}
+
+	func(pamh,response);
+	if (dlclose(handle) != 0)
+	{
+		_pam_log(pamh,LOG_ERR,"dlclose failed: %s", dlerror());
+	}
+}
+
 
 /*  base config, plus config file, but no pam cmdline */
 static radius_conf_t savconf = {.min_priv_lvl = 15,	/* default priv level */
@@ -1699,7 +1724,7 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t * pamh, int flags, int argc,
 	/* Whew! Done the pasword checks, look for an authentication acknowledge */
 	if (response->code == PW_AUTHENTICATION_ACK) {
 		int privlvl;
-
+		store_attr(pamh, response);
 		/*
 		 * get the privilege level via VSA, if present, and save it for the
 		 *  accounting entry point
