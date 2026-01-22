@@ -94,7 +94,7 @@ __write_mapfile(pam_handle_t * pamh, const char *user, uid_t uid,
 		auid = audit_getloginuid();
 	}
 	session = get_sessionid();
-	pid = getpid();
+	pid = getppid();
 
 	if (auid == 0 || auid == ~0U || session == ~0U) {
 		/*  if these aren't valid, we can't use the mapfile, so
