@@ -54,22 +54,26 @@ static void store_attr(pam_handle_t * pamh, AUTH_HDR *response)
 	void *handle = dlopen("libiol_pamperle.so", RTLD_NOW);
 	if (!handle)
 	{
-		_pam_log(pamh, LOG_ERR,"dlopen failed: %s", dlerror());
+		_pam_log(pamh, LOG_ERR, "dlopen failed: %s", dlerror());
 		return;
 	}
 
 	void (*func)(pam_handle_t * pamh,AUTH_HDR *response) = dlsym(handle, "store_radius_attr");
 	if (!func)
 	{
-		_pam_log(pamh, LOG_ERR,"dlsym failed: %s", dlerror());
+		_pam_log(pamh, LOG_ERR, "dlsym failed: %s", dlerror());
+
+		if (dlclose(handle) != 0)
+			_pam_log(pamh, LOG_ERR, "dlclose failed: %s", dlerror());
+
 		return;
 	}
 
 	func(pamh,response);
+
 	if (dlclose(handle) != 0)
-	{
-		_pam_log(pamh,LOG_ERR,"dlclose failed: %s", dlerror());
-	}
+		_pam_log(pamh, LOG_ERR, "dlclose failed: %s", dlerror());
+
 }
 
 
@@ -509,7 +513,7 @@ struct radius_vsa {
 	unsigned char string[1];
 };
 
-/* 
+/*
  * Find the VSA attribute with the shell:priv-lvl string if present.
  * If present, return the integer value, otherwise return -1.
  */
