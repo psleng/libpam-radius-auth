@@ -31,6 +31,7 @@
 #define PAM_SM_SESSION
 
 #include <dlfcn.h>
+#include <libaudit.h>
 #include "pam_radius_auth.h"
 
 #define DPRINT if (debug || cfg_debug) _pam_log
@@ -72,9 +73,48 @@ static void store_attr(pam_handle_t * pamh, AUTH_HDR *response)
 	func(pamh,response);
 
 	if (dlclose(handle) != 0)
+	{
 		_pam_log(pamh, LOG_ERR, "dlclose failed: %s", dlerror());
-
+		return;
+	}
 }
+
+/*
+ * Return:
+ *   0  - Operator level
+ *   1  - Admin level
+ *  -1  - Not configured
+ */
+static int get_perle_usr_lvl(pam_handle_t * pamh)
+{
+	void *handle = dlopen("libiol_pamperle.so", RTLD_NOW);
+	if (!handle)
+	{
+		_pam_log(pamh, LOG_ERR, "dlopen failed: %s", dlerror());
+		return -2;
+	}
+
+	int (*func)(pam_handle_t * pamh) = dlsym(handle, "get_perle_user_level");
+	if (!func)
+	{
+		_pam_log(pamh, LOG_ERR, "dlsym failed: %s", dlerror());
+
+		if (dlclose(handle) != 0)
+			_pam_log(pamh, LOG_ERR, "dlclose failed: %s", dlerror());
+
+		return -3;
+	}
+
+	int perle_lvl = func(pamh);
+
+	if (dlclose(handle) != 0)
+	{
+		_pam_log(pamh, LOG_ERR, "dlclose failed: %s", dlerror());
+		return -4;
+	}
+	return perle_lvl;
+}
+
 
 
 /*  base config, plus config file, but no pam cmdline */
@@ -1426,7 +1466,6 @@ setup_userinfo(pam_handle_t * pamh, radius_conf_t *cfg, const char *user,
 	       int debug, int privileged)
 {
 	struct passwd *pw = NULL, *pwp = NULL;
-	uid_t uid = (uid_t)~0;
 	char *homedir = NULL;
 
 	/*
@@ -1445,42 +1484,14 @@ setup_userinfo(pam_handle_t * pamh, radius_conf_t *cfg, const char *user,
 				 nprompt);
 	}
 
-	/*
-	 * because the RADIUS protocol is single pass, we always have the
-	 * pw_uid of the unprivileged account at this point.  Set things up
-	 * so we use the uid of the privileged radius account.  We do this
-	 * for the uid.  The homedir from this will be the unmapped privileged
-	 * radius user itself, not the login.
-	 */
-	if (privileged) {
-		if (!cfg->privusrmap[0] || !(pwp = getpwnam(cfg->privusrmap))) {
-			_pam_log(pamh, LOG_WARNING, "Failed to find uid for"
-				 " privileged account %s, uid may be wrong"
-				 " for user %s",
-				 cfg->privusrmap[0] ? cfg->privusrmap :
-				 "(unset in config)", user);
-		}
-		if (pwp)
-			uid = pwp->pw_uid;
-	}
+	char env_priv[32];
+	snprintf(env_priv, sizeof(env_priv), "RADIUS_PRIV=%d", privileged ? 1 : 0);
+	if (pam_putenv(pamh, env_priv) != PAM_SUCCESS)
+		_pam_log(pamh, LOG_WARNING, "Failed to set RADIUS_PRIV env");
+	else
+		putenv(strdup(env_priv));
 
 	pw = getpwnam(user);
-	if (uid == (uid_t)~0 && pw)
-		uid = pw->pw_uid;
-
-	if (uid == (uid_t)~0) {
-		pam_syslog(pamh, LOG_WARNING,
-			   "Failed to get user UID for user (%s)", user);
-		return; /*  can't do anything */
-	}
-
-	/*
-	 * We don't "fail" on errors here, since they are not fatal for
-	 * the session, although they can result in name or uid lookups not
-	 * working correctly.
-	 */
-	__write_mapfile(pamh, user, uid, privileged, debug);
-
 	if(privileged) { /* now we can get the correct homedir for priv user */
 		if (!(pwp = getpwnam(user))) {
 			_pam_log(pamh, LOG_WARNING, "Failed to find home dir"
@@ -1727,8 +1738,11 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t * pamh, int flags, int argc,
 
 	/* Whew! Done the pasword checks, look for an authentication acknowledge */
 	if (response->code == PW_AUTHENTICATION_ACK) {
-		int privlvl;
 		store_attr(pamh, response);
+
+		int privlvl;
+		int usr_lvl = 0;
+		int perle_lvl = get_perle_usr_lvl(pamh);
 		/*
 		 * get the privilege level via VSA, if present, and save it for the
 		 *  accounting entry point
@@ -1745,8 +1759,14 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t * pamh, int flags, int argc,
 					 "=%d, min for priv=%d", privlvl,
 					 config.min_priv_lvl);
 		}
+
+		usr_lvl = (privlvl >= config.min_priv_lvl);
+
+		if (perle_lvl > -1)
+			usr_lvl = perle_lvl;
+
 		setup_userinfo(pamh, &config, user, debug,
-			       privlvl >= config.min_priv_lvl);
+			       usr_lvl);
 		retval = PAM_SUCCESS;
 	} else {
 		retval = PAM_AUTH_ERR;	/* authentication failure */
@@ -1825,6 +1845,62 @@ static int pam_private_session(pam_handle_t * pamh, int flags, int argc,
 	if (status == PW_STATUS_STOP && !__remove_mapfile(pamh, user, debug))
 		retval = PAM_USER_UNKNOWN;
 	PAM_FAIL_CHECK;
+
+	if (status == PW_STATUS_START)
+	{
+		struct passwd *pw = NULL, *pwp = NULL;
+		uid_t uid = (uid_t)~0;
+
+		const char *pam_priv_val = pam_getenv(pamh, "RADIUS_PRIV");
+		int privileged = 0;
+		if (pam_priv_val)
+		{
+			privileged = atoi(pam_priv_val);
+			pam_putenv(pamh, "RADIUS_PRIV=");
+		}
+		else
+		{
+			const char *priv_val = getenv("RADIUS_PRIV");
+			if (priv_val)
+				privileged = atoi(priv_val);
+		}
+		unsetenv("RADIUS_PRIV");
+
+		/*
+		* because the RADIUS protocol is single pass, we always have the
+		* pw_uid of the unprivileged account at this point.  Set things up
+		* so we use the uid of the privileged radius account.  We do this
+		* for the uid.  The homedir from this will be the unmapped privileged
+		* radius user itself, not the login.
+		*/
+		if (privileged) {
+			if (!config.privusrmap[0] || !(pwp = getpwnam(config.privusrmap))) {
+				_pam_log(pamh, LOG_WARNING, "Failed to find uid for"
+					" privileged account %s, uid may be wrong"
+					" for user %s",
+					config.privusrmap[0] ? config.privusrmap :
+					"(unset in config)", user);
+			}
+			if (pwp)
+				uid = pwp->pw_uid;
+		}
+
+		pw = getpwnam(user);
+		if (uid == (uid_t)~0 && pw)
+			uid = pw->pw_uid;
+		if (uid == (uid_t)~0) {
+			pam_syslog(pamh, LOG_WARNING,
+				"Failed to get user UID for user (%s)", user);
+			PAM_FAIL_CHECK;
+		}
+
+		/*
+		* We don't "fail" on errors here, since they are not fatal for
+		* the session, although they can result in name or uid lookups not
+		* working correctly.
+		*/
+		__write_mapfile(pamh, user, uid, privileged, debug);
+	}
 
 	/*
 	 * If there's no client id specified, use the service type, to help
