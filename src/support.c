@@ -54,6 +54,36 @@ static unsigned get_sessionid(void)
 	return id;
 }
 
+int is_systemd_process(pid_t pid)
+{
+    char path[256];
+    snprintf(path, sizeof(path), "/proc/%d/cmdline", pid);
+
+    FILE *fp = fopen(path, "r");
+    if (!fp)
+        return 0;
+
+    char buf[4096];
+    size_t len = fread(buf, 1, sizeof(buf) - 1, fp);
+    fclose(fp);
+
+    if (len == 0)
+        return 0;
+
+    buf[len] = '\0';
+
+    const char *cmd = buf;
+
+    const char *base = strrchr(cmd, '/');
+    if (base)
+        cmd = base + 1;
+
+    if (strcmp(cmd, "(systemd)") == 0)
+        return 1;
+
+    return 0;
+}
+
 /*
  * Write the mapping file used by libnss-mapuser into mapdir/SESSIONID
  * This info is used by the mapuser and mapuid NSS plugins to return
@@ -89,12 +119,17 @@ __write_mapfile(pam_handle_t * pamh, const char *user, uid_t uid,
 	snprintf(tmstr, sizeof tmstr, "%s.%u", tmpstr, (unsigned)tv.tv_usec);
 
 	auid = audit_getloginuid();
-	if (auid == ~0U) {	/* normal case */
+
+	if (auid == ~0U || (uid > 0 && uid > auid)) {	/* normal case */
 		audit_setloginuid(uid);
 		auid = audit_getloginuid();
 	}
+
 	session = get_sessionid();
-	pid = getppid();
+	pid = getpid();
+
+	if (is_systemd_process(pid))
+		return;
 
 	if (auid == 0 || auid == ~0U || session == ~0U) {
 		/*  if these aren't valid, we can't use the mapfile, so
@@ -123,9 +158,9 @@ __write_mapfile(pam_handle_t * pamh, const char *user, uid_t uid,
 		return;
 	}
 	res =
-	    fprintf(f,
-		    "%s\nuser=%s\npid=%u\nauid=%u\nsession=%u\nprivileged=%s\n",
-		    tmstr, user, pid, auid, session, privileged ? "yes" : "no");
+		fprintf(f,
+			"%s\nuser=%s\npid=%u\nauid=%u\nsession=%u\nprivileged=%s\n",
+			tmstr, user, pid, auid, session, privileged ? "yes" : "no");
 	if (fclose(f) == EOF || res <= 0)
 		pam_syslog(pamh, LOG_WARNING, "Error writing mapfile %s for"
 			   " user (%s): %m", tmpstr, user);
@@ -158,6 +193,7 @@ int __remove_mapfile(pam_handle_t * pamh, const char *user, int debug)
 	if (!f)
 		return 0;
 	auid = audit_getloginuid();
+
 	while (fgets(linebuf, sizeof linebuf, f)) {
 		unsigned long val;
 		char *ok;
@@ -203,7 +239,7 @@ int __remove_mapfile(pam_handle_t * pamh, const char *user, int debug)
  */
 void
 __chk_homedir(pam_handle_t * pamh, const char *user, const char *homedir,
-	      int debug)
+		  int debug)
 {
 	int rc, retval, child, restore = 0;
 	struct stat st;
